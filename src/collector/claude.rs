@@ -1703,6 +1703,13 @@ fn read_env_var_from_proc(pid: u32, var_name: &str) -> Option<String> {
 /// without elevated privileges, so per-process `CLAUDE_CONFIG_DIR` overrides
 /// can't be detected — abtop's own env (resolved in `refresh_config_dirs`)
 /// is the only signal there.
+///
+/// On macOS, `ps eww`/`KERN_PROCARGS2` are unreliable: the kernel truncates
+/// the env block to ~120 chars for non-root callers, so `CLAUDE_CONFIG_DIR`
+/// is rarely visible. Discovery of profile sessions instead piggybacks on
+/// `libproc` open-FD inspection (see `discover_active_session_paths`), which
+/// reads the actual session-file paths a Claude process has open and infers
+/// the config dir from there.
 #[cfg(not(target_os = "linux"))]
 fn read_env_var_from_proc(_pid: u32, _var_name: &str) -> Option<String> {
     None

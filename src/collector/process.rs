@@ -359,12 +359,21 @@ pub fn last_path_segment(s: &str) -> Option<&str> {
 /// Check if a command string has a given binary name in executable position.
 /// Checks the first two argv tokens only (covers direct invocation and
 /// interpreter-wrapped scripts like `node /path/to/codex ...`).
+///
+/// Also matches the autoupdater layout used by Claude Code 2.x where the
+/// running binary is named after its version (e.g.
+/// `~/.local/share/claude/versions/2.1.121`) — basename equality alone would
+/// miss this, so we also accept any path of the form `<...>/<name>/versions/<filename>`.
 #[cfg(not(windows))]
 pub fn cmd_has_binary(cmd: &str, name: &str) -> bool {
     let mut tokens = cmd.split_whitespace().take(2);
     tokens.any(|tok| {
         let base = tok.rsplit('/').next().unwrap_or(tok);
-        base == name
+        if base == name {
+            return true;
+        }
+        let parts: Vec<&str> = tok.rsplit('/').collect();
+        parts.len() >= 3 && parts[1] == "versions" && parts[2] == name
     })
 }
 
@@ -377,7 +386,13 @@ pub fn cmd_has_binary(cmd: &str, name: &str) -> bool {
     tokens.any(|tok| {
         let base = tok.rsplit(['/', '\\']).next().unwrap_or(tok);
         let base = base.strip_suffix(".exe").unwrap_or(base);
-        base.eq_ignore_ascii_case(name)
+        if base.eq_ignore_ascii_case(name) {
+            return true;
+        }
+        let parts: Vec<&str> = tok.rsplit(['/', '\\']).collect();
+        parts.len() >= 3
+            && parts[1].eq_ignore_ascii_case("versions")
+            && parts[2].eq_ignore_ascii_case(name)
     })
 }
 
@@ -412,4 +427,38 @@ pub fn collect_git_stats(cwd: &str) -> (u32, u32) {
     }
 
     (added, modified)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cmd_has_binary_basename_match() {
+        assert!(cmd_has_binary("/usr/local/bin/claude --foo", "claude"));
+        assert!(cmd_has_binary("claude", "claude"));
+        assert!(!cmd_has_binary("/usr/local/bin/claude-launch", "claude"));
+    }
+
+    #[test]
+    fn cmd_has_binary_autoupdater_layout() {
+        // Claude Code 2.x: actual binary is named after its version, but the
+        // path has `<name>/versions/<file>` structure we can match on.
+        assert!(cmd_has_binary(
+            "/Users/a/.local/share/claude/versions/2.1.121 --allow-dangerously-skip-permissions",
+            "claude",
+        ));
+        assert!(cmd_has_binary(
+            "/opt/codex/versions/0.42.0 --foo",
+            "codex",
+        ));
+    }
+
+    #[test]
+    fn cmd_has_binary_does_not_overmatch() {
+        // A sibling dir under `claude/` but not under `versions/` shouldn't match.
+        assert!(!cmd_has_binary("/Users/a/.local/share/claude/foo", "claude"));
+        // A `versions/` dir not under `<name>/` shouldn't match either.
+        assert!(!cmd_has_binary("/some/versions/2.1.121", "claude"));
+    }
 }
