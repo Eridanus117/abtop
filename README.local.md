@@ -44,4 +44,7 @@ For `abtop` to see Claude sessions in non-default profile dirs (e.g. `~/.config/
 
 ## Upstream
 
-If the patch is accepted upstream, this fork can be deleted and replaced with the published `abtop >= <version>`.
+- Issue: [graykode/abtop#93](https://github.com/graykode/abtop/issues/93)
+- PR: [graykode/abtop#94](https://github.com/graykode/abtop/pull/94) (branch `upstream-fix-cmd-has-binary`, patch-only — no `README.local.md`)
+
+If/when the PR is merged and a release containing it ships, this fork can be deleted and replaced with the published `abtop`.
